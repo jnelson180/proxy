@@ -2,7 +2,6 @@ var express = require('express');
 var app = express();
 var port = process.env.PORT || 3000;
 var http = require('http');
-
 // ******** remove between this and bottom line if issue ********
 var path = require('path');
 // make express look in public dir for assets (css/js/img/etc)
@@ -26,17 +25,27 @@ app.get('/', function(req, res) {
 var base = "";
 var origHost = "";
 
-// go to proxied page
+// GET proxied URL- this happens for each resource
 app.get('/*', function(req, res) {
-console.log("starting proxy...");
+// console.log("starting proxy...");
+
+// split baseUrl based on whether tailing '/' is in URL
+if (base == "") {
 if (req.url.slice(-1) == "/") {
 var baseUrl = req.url.split("http://").pop().slice(0, -1);
+console.log("baseUrl is " + baseUrl);
 } else {
 	var baseUrl = req.url.split("http://").pop();
 }
+}
+
 
 function onRequest(client_req, client_res) {
 
+	console.log('at beginning of onRequest, base is ' + base +
+		' and origHost is ' + origHost);
+
+// this if statement only executes on first visit to unique host
 if (i == 0) {
   var options = {
     hostname: baseUrl,
@@ -44,42 +53,39 @@ if (i == 0) {
     path: base + client_req.url.substr(1),
     method: 'GET'
   };
+  console.log("i = 0");
   base = client_req.url.substr(1).slice(0, -1);
   origHost = base.split("http://").pop();
-  console.log("origHost is '" + origHost+ "' and base is '" + base+ "'.");
+  console.log(i + ": origHost is '" + origHost+ "' and base is '" + base+ "'.");
+  i++;
 }
 
-if (i > 0 && base.indexOf('url?q') == -1) {
-  var options = {
+// executes if still at page from same host
+else if (i > 0 && client_req.url.substr(1).indexOf('url?q') == -1) {
+    options = {
     hostname: origHost,
     port: 80,
     path: base + '/' + client_req.url.substr(1),
     method: 'GET'
   };	
-}
-else if (i > 0) {
-  i = 0;
-  base = client_req.url.substr(1).slice(0, -1);
-  origHost = base.split("http://").pop().split('url?q=').pop();
-  console.log("origHost is '" + origHost+ "' and base is '" + base+ "'.");
-  var options = {
-    hostname: origHost,
-    port: 80,
-    path: base + '/' + client_req.url.substr(1),
-    method: 'GET'
-  };		
+  console.log(i + ": " + client_req.url);
+  i++;
 }
 
-console.log(i + ': serve ' + options.path);
-
-console.log(base.indexOf('url?q'));
-if (base.indexOf('url?q') == -1) {
-	i++; 
-} else {
+// executes if host path has changed
+else {
 	i = 0;
-	base = client_req.url.substr(1).slice(0, -1);
+	base = 'http://' + client_req.url.substr(1).slice(0, -1).split('//').pop().split('/').shift();
   	origHost = base.split("http://").pop().split('url?q=').pop();
-  	console.log("origHost is '" + origHost+ "' and base is '" + base+ "'.");
+  	console.log(i + ": origHost is '"+origHost+"' and base is '" + base+ "'.");
+  	    options = {
+  		hostname: origHost,
+  		port: 80,
+  		path: client_req.url.substr(1).split('url?q=').pop(),
+  		method: 'GET'
+  	};
+  	console.log('Redirecting to ' + 
+  		client_req.url.substr(1).split('url?q=').pop());
 }
 
   var proxy = http.request(options, function (res) {
